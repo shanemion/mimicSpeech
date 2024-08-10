@@ -52,10 +52,10 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
-  const [googleSignInPending, setGoogleSignInPending] = useState(false);
-
   const [loading, setLoading] = useState(true);
+  const [pendingGoogleUser, setPendingGoogleUser] = useState(null);
   const navigate = useNavigate();
+  
 
   const register = async (email, password, additionalData) => {
     const userCredential = await createUserWithEmailAndPassword(
@@ -98,31 +98,53 @@ export const AuthProvider = ({ children }) => {
   
   const signInWithGoogle = async () => {
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
       const user = result.user;
-  
-      // Check if the user is new and doesn't exist in Firestore
+
       const userDoc = await getDoc(doc(db, "users", user.uid));
       if (!userDoc.exists()) {
-        // Initialize credits and plan
-        await setDoc(doc(db, "users", user.uid), {
-          credits: 15,
-          firstName: "",
-          lastName: "",
-          plan: "free",
+        // User is new, set pendingGoogleUser and navigate to complete registration
+        setPendingGoogleUser({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
         });
-        // Enter into the intermediate step for Google Sign-In
-        setGoogleSignInPending(true);
+        navigate("/register", { state: { fromGoogle: true } });
       } else {
-        // User already registered, navigate directly
+        // User already exists, set currentUser and navigate to dashboard
         setCurrentUser(user);
         navigate("/dashboard");
       }
     } catch (error) {
-      console.error(error);
+      console.error("Error signing in with Google:", error);
     }
   };
-  
+
+  const completeGoogleSignUp = async (username, firstName, lastName) => {
+    if (!pendingGoogleUser) {
+      throw new Error("No pending Google user");
+    }
+
+    try {
+      await setDoc(doc(db, "users", pendingGoogleUser.uid), {
+        email: pendingGoogleUser.email,
+        username,
+        firstName,
+        lastName,
+        credits: 15,
+        plan: "free",
+        subscriptionId: "",
+      });
+
+      setCurrentUser({ ...pendingGoogleUser, username, firstName, lastName });
+      setPendingGoogleUser(null);
+      navigate("/dashboard");
+    } catch (error) {
+      console.error("Error completing Google sign up:", error);
+      throw error;
+    }
+  };
 
   const fetchCredits = async (userId) => {
     const userRef = doc(db, "users", userId);
@@ -295,8 +317,8 @@ export const AuthProvider = ({ children }) => {
     deleteCredits,
     deleteDoc,
     doc,
-    googleSignInPending,
-    setGoogleSignInPending,
+    signInWithGoogle,
+    completeGoogleSignUp,
     getDoc,
     setDoc,
     fetchSubscriptionId,

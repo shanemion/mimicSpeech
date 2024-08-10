@@ -222,7 +222,7 @@ const CompletionGenerator = ({
     try {
       if (credits >= responseLength) {
         const response = await openai.completions.create({
-          model: "text-davinci-003",
+          model: "gpt-3.5-turbo-instruct",
           prompt: prompt,
           max_tokens: 3900,
           temperature: 0.2,
